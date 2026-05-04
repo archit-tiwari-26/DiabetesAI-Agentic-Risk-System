@@ -766,61 +766,109 @@ def main():
         else:
             st.markdown(f"### History for **{pid}** ({len(records)} records)")
             
-            # --- Longitudinal Graph (Agent E Monitoring) ---
+            # --- Longitudinal Graph (Agent E Monitoring) — Interactive ---
             if len(records) > 1:
-                import matplotlib.pyplot as plt
-                
+                import plotly.graph_objects as go
+
                 # Sort records chronologically for the graph
                 sorted_records = sorted(records, key=lambda r: r.get('date', ''))
                 dates = [r.get('date', '').split(' ')[0] for r in sorted_records]
-                
+
                 # If multiple records have the same date, append time to make them distinct
                 if len(set(dates)) < len(dates):
-                    dates = [r.get('date', '')[5:16] for r in sorted_records] # 'MM-DD HH:MM'
-                    
+                    dates = [r.get('date', '')[5:16] for r in sorted_records]  # 'MM-DD HH:MM'
+
                 glucose_vals = [float(r.get('input', {}).get('Glucose', 0)) for r in sorted_records]
                 risk_vals = [float(r.get('probability', 0)) * 100 for r in sorted_records]
-                
+                risk_levels = [r.get('risk_level', 'N/A') for r in sorted_records]
+
                 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
                 st.markdown("#### Longitudinal Trend (Agent E)")
-                
-                # Create figure with dark theme for Streamlit
-                plt.style.use('dark_background')
-                fig, ax1 = plt.subplots(figsize=(10, 4))
-                fig.patch.set_alpha(0.0) # Transparent background
-                ax1.patch.set_alpha(0.0)
-                
-                color1 = '#818cf8' # Indigo/Blue
-                ax1.set_ylabel('Glucose (mg/dL)', color=color1, fontweight='bold')
-                line1 = ax1.plot(range(len(dates)), glucose_vals, marker='o', color=color1, linewidth=3, markersize=8, label='Glucose')
-                ax1.tick_params(axis='y', labelcolor=color1)
-                ax1.set_xticks(range(len(dates)))
-                ax1.set_xticklabels(dates, rotation=25, ha='right', color='#e2e8f0')
-                
-                # Thresholds
-                ax1.axhline(140, color='#eab308', linestyle='--', alpha=0.6, label='Warning (140)')
-                ax1.axhline(180, color='#ef4444', linestyle='--', alpha=0.6, label='Critical (180)')
-                ax1.set_ylim(min(80, min(glucose_vals)-20), max(220, max(glucose_vals)+20))
-                
-                # Secondary axis for Risk Probability
-                ax2 = ax1.twinx()
-                color2 = '#ef4444' # Red
-                ax2.set_ylabel('Risk Probability (%)', color=color2, fontweight='bold')
-                line2 = ax2.plot(range(len(dates)), risk_vals, marker='s', color=color2, linewidth=3, markersize=8, label='Risk %')
-                ax2.tick_params(axis='y', labelcolor=color2)
-                ax2.set_ylim(0, 100)
-                
-                # Combined legend
-                lines = line1 + line2 + [ax1.lines[0], ax1.lines[1]]
-                labels = [l.get_label() for l in lines]
-                ax1.legend(lines, labels, loc='upper left', framealpha=0.2)
-                
-                ax1.grid(color='white', alpha=0.1)
-                plt.tight_layout()
-                
-                st.pyplot(fig)
+
+                fig = go.Figure()
+
+                # Glucose trace (primary y-axis)
+                fig.add_trace(go.Scatter(
+                    x=dates, y=glucose_vals,
+                    name='Glucose',
+                    mode='lines+markers',
+                    marker=dict(size=10, color='#818cf8', symbol='circle'),
+                    line=dict(width=3, color='#818cf8'),
+                    hovertemplate=(
+                        '<b>%{x}</b><br>'
+                        'Glucose: <b>%{y:.1f} mg/dL</b>'
+                        '<extra></extra>'
+                    ),
+                    yaxis='y1',
+                ))
+
+                # Risk % trace (secondary y-axis)
+                fig.add_trace(go.Scatter(
+                    x=dates, y=risk_vals,
+                    name='Risk %',
+                    mode='lines+markers',
+                    marker=dict(size=10, color='#ef4444', symbol='square'),
+                    line=dict(width=3, color='#ef4444'),
+                    customdata=risk_levels,
+                    hovertemplate=(
+                        '<b>%{x}</b><br>'
+                        'Risk: <b>%{y:.1f}%</b> (%{customdata})'
+                        '<extra></extra>'
+                    ),
+                    yaxis='y2',
+                ))
+
+                # Glucose threshold lines
+                fig.add_hline(
+                    y=140, line_dash='dash', line_color='#eab308',
+                    opacity=0.6, annotation_text='Warning (140)',
+                    annotation_position='top left',
+                    annotation_font_color='#eab308',
+                )
+                fig.add_hline(
+                    y=180, line_dash='dash', line_color='#ef4444',
+                    opacity=0.6, annotation_text='Critical (180)',
+                    annotation_position='top left',
+                    annotation_font_color='#ef4444',
+                )
+
+                # Layout with dual y-axes and dark transparent theme
+                fig.update_layout(
+                    template='plotly_dark',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    height=400,
+                    margin=dict(l=50, r=50, t=30, b=50),
+                    legend=dict(
+                        orientation='h', yanchor='bottom', y=1.02,
+                        xanchor='left', x=0,
+                        font=dict(color='#e2e8f0'),
+                    ),
+                    hovermode='x unified',
+                    yaxis=dict(
+                        title=dict(text='Glucose (mg/dL)', font=dict(color='#818cf8')),
+                        tickfont=dict(color='#818cf8'),
+                        gridcolor='rgba(255,255,255,0.08)',
+                        range=[
+                            min(80, min(glucose_vals) - 20),
+                            max(220, max(glucose_vals) + 20),
+                        ],
+                    ),
+                    yaxis2=dict(
+                        title=dict(text='Risk Probability (%)', font=dict(color='#ef4444')),
+                        tickfont=dict(color='#ef4444'),
+                        overlaying='y', side='right',
+                        range=[0, 100],
+                        showgrid=False,
+                    ),
+                    xaxis=dict(
+                        tickfont=dict(color='#e2e8f0'),
+                        gridcolor='rgba(255,255,255,0.08)',
+                    ),
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-                plt.close(fig) # prevent memory leak
             # -----------------------------------------------
 
             for i, rec in enumerate(reversed(records)):
@@ -866,7 +914,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-

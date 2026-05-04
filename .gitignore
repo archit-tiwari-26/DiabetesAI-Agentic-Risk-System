@@ -135,7 +135,5 @@ Thumbs.db
 # Project specific
 logs/
 data/raw/*.csv
-data/processed/*.csv
-src/models/saved_models/*
-*.pkl
+# src/models/saved_models/*
 !.gitkeep
