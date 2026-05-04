@@ -765,6 +765,64 @@ def main():
             st.info("No previous records found for this patient.")
         else:
             st.markdown(f"### History for **{pid}** ({len(records)} records)")
+            
+            # --- Longitudinal Graph (Agent E Monitoring) ---
+            if len(records) > 1:
+                import matplotlib.pyplot as plt
+                
+                # Sort records chronologically for the graph
+                sorted_records = sorted(records, key=lambda r: r.get('date', ''))
+                dates = [r.get('date', '').split(' ')[0] for r in sorted_records]
+                
+                # If multiple records have the same date, append time to make them distinct
+                if len(set(dates)) < len(dates):
+                    dates = [r.get('date', '')[5:16] for r in sorted_records] # 'MM-DD HH:MM'
+                    
+                glucose_vals = [float(r.get('input', {}).get('Glucose', 0)) for r in sorted_records]
+                risk_vals = [float(r.get('probability', 0)) * 100 for r in sorted_records]
+                
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown("#### Longitudinal Trend (Agent E)")
+                
+                # Create figure with dark theme for Streamlit
+                plt.style.use('dark_background')
+                fig, ax1 = plt.subplots(figsize=(10, 4))
+                fig.patch.set_alpha(0.0) # Transparent background
+                ax1.patch.set_alpha(0.0)
+                
+                color1 = '#818cf8' # Indigo/Blue
+                ax1.set_ylabel('Glucose (mg/dL)', color=color1, fontweight='bold')
+                line1 = ax1.plot(range(len(dates)), glucose_vals, marker='o', color=color1, linewidth=3, markersize=8, label='Glucose')
+                ax1.tick_params(axis='y', labelcolor=color1)
+                ax1.set_xticks(range(len(dates)))
+                ax1.set_xticklabels(dates, rotation=25, ha='right', color='#e2e8f0')
+                
+                # Thresholds
+                ax1.axhline(140, color='#eab308', linestyle='--', alpha=0.6, label='Warning (140)')
+                ax1.axhline(180, color='#ef4444', linestyle='--', alpha=0.6, label='Critical (180)')
+                ax1.set_ylim(min(80, min(glucose_vals)-20), max(220, max(glucose_vals)+20))
+                
+                # Secondary axis for Risk Probability
+                ax2 = ax1.twinx()
+                color2 = '#ef4444' # Red
+                ax2.set_ylabel('Risk Probability (%)', color=color2, fontweight='bold')
+                line2 = ax2.plot(range(len(dates)), risk_vals, marker='s', color=color2, linewidth=3, markersize=8, label='Risk %')
+                ax2.tick_params(axis='y', labelcolor=color2)
+                ax2.set_ylim(0, 100)
+                
+                # Combined legend
+                lines = line1 + line2 + [ax1.lines[0], ax1.lines[1]]
+                labels = [l.get_label() for l in lines]
+                ax1.legend(lines, labels, loc='upper left', framealpha=0.2)
+                
+                ax1.grid(color='white', alpha=0.1)
+                plt.tight_layout()
+                
+                st.pyplot(fig)
+                st.markdown('</div>', unsafe_allow_html=True)
+                plt.close(fig) # prevent memory leak
+            # -----------------------------------------------
+
             for i, rec in enumerate(reversed(records)):
                 rl = rec.get("risk_level", "Unknown")
                 with st.expander(
